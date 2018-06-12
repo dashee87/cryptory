@@ -27,9 +27,9 @@ $ pip install cryptory
 
 ### Dependencies
 
--  pandas>=0.17.0
--  numpy>=1.10.0
--  pytrends>=4.0.0
+-  pandas>=0.23.0
+-  numpy>=1.14.0
+-  pytrends>=4.4.0
 -  beautifulsoup4>=4.0.0
 
 ## How to Use
