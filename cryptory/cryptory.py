@@ -1,5 +1,3 @@
-
-
 # python 2
 try:
     from urllib.request import Request, urlopen  
@@ -82,8 +80,9 @@ class Cryptory():
         try: 
             parsed_page = urlopen(url, timeout=self.timeout).read()
             parsed_page = parsed_page.decode("utf8")
-        except Exception as e:
-            return pd.DataFrame({"error":e}, index=[0])
+        except:
+            # future versions may split out the different exceptions (e.g. timeout)
+            raise
         if metric == 'rankData':
             start_segment = parsed_page.find(metric)
         else:
@@ -93,7 +92,7 @@ class Cryptory():
             end_list = parsed_page.find("]", start_list)
             parsed_page = parsed_page[start_list:end_list + 1]
         else:
-            return pd.DataFrame({"error":"Could not find that subreddit"}, index=[0])
+            return ValueError("Could not find that subreddit")
         parsed_page = parsed_page.replace("'", '"')
         parsed_page = parsed_page.replace('a', '\"subscriber_count\"')
         parsed_page = parsed_page.replace('y', '\"date\"')
@@ -128,14 +127,15 @@ class Cryptory():
         try:
             output = pd.read_html("https://coinmarketcap.com/currencies/{}/historical-data/?start={}&end={}".format(
                 coin, self.from_date.replace("-", ""), self.to_date.replace("-", "")))[0]
-        except Exception as e:
-            return pd.DataFrame({"error":e}, index=[0])
+        except:
+            # future versions may split out the different exceptions (e.g. timeout)
+            raise
         output = output.assign(Date=pd.to_datetime(output['Date']))
         for col in output.columns:
             if output[col].dtype == np.dtype('O'):
                 output.loc[output[col]=="-",col]=0
                 output[col] = output[col].astype('int64')
-        output.columns = [col.lower() for col in output.columns]
+        output.columns = [re.sub(r"[^a-z]", "", col.lower()) for col in output.columns]
         if coin_col:
             output['coin'] = coin
         return output
@@ -173,15 +173,16 @@ class Cryptory():
         try: 
             parsed_page = urlopen(parsed_page, timeout=self.timeout).read()
             parsed_page = parsed_page.decode("utf8")
-        except Exception as e:
-            return pd.DataFrame({"error":e}, index=[0])
+        except:
+            # future versions may split out the different exceptions (e.g. timeout)
+            raise
         start_segment = parsed_page.find("new Dygraph")
         if start_segment != -1:
             start_list = parsed_page.find('[[', start_segment)
             end_list = parsed_page.find(']]', start_list)
             parsed_page = parsed_page[start_list:end_list]
         else:
-            return pd.DataFrame({"error":"Could not find the appropriate text tag"}, index=[0])
+            raise ValueError("Could not find the appropriate text tag in the scraped page")
         parsed_page = parsed_page.replace('new Date(', '')
         parsed_page = parsed_page.replace(')', '')
         parsed_page = parsed_page.replace('null', '0')
@@ -227,12 +228,13 @@ class Cryptory():
         try: 
             parsed_page = urlopen(url, timeout=self.timeout).read()
             parsed_page = parsed_page.decode("utf8")
-        except Exception as e:
-            return pd.DataFrame({"error":e}, index=[0])
+        except:
+            # future versions may split out the different exceptions (e.g. timeout)
+            raise
         output = json.loads(parsed_page)
         if isinstance(output, dict):
             if 'error' in list(output.keys()):
-                return pd.DataFrame(output, index=[0])
+                raise ValueError("The content of the page was not as it should be")
         output = pd.DataFrame(output)
         # more intuitive column order
         output = output[['date', 'close', 'open', 'high', 'low', 
@@ -269,15 +271,16 @@ class Cryptory():
         try: 
             parsed_page = urlopen(url, timeout=self.timeout).read()
             parsed_page = parsed_page.decode("utf8")
-        except Exception as e:
-            return pd.DataFrame({"error":e}, index=[0])
+        except:
+            # future versions may split out the different exceptions (e.g. timeout)
+            raise
         start_segment = parsed_page.find("chart xAxisName")
         if start_segment != -1:
             start_list = parsed_page.find("<", start_segment)
             end_list = parsed_page.find("/></chart>", start_list)
             parsed_page = parsed_page[start_list:end_list]
         else:
-            return pd.DataFrame({"error":"Could not find the appropriate text tag"}, index=[0])
+            raise ValueError("Could not find the appropriate text tag in the scraped page")
         parsed_page = re.sub(r" showLabel='[0-9]'", "", parsed_page)
         parsed_page = parsed_page.replace("'", '"')
         parsed_page = parsed_page.replace("set ", '')
@@ -326,19 +329,24 @@ class Cryptory():
         try: 
             parsed_page = urlopen(url, timeout=1).read()
             parsed_page = parsed_page.decode("utf8")
-        except Exception as e:
-            return pd.DataFrame({"error":e}, index=[0])
+        except:
+            # future versions may split out the different exceptions (e.g. timeout)
+            raise
         start_segment = parsed_page.find('{\"prices\":')
         if start_segment != -1:
             start_list = parsed_page.find("[", start_segment)
             end_list = parsed_page.find("]", start_list)
             parsed_page = parsed_page[start_list:end_list+1]
         else:
-            return pd.DataFrame({"error":"Could not find the appropriate text tag"}, index=[0])
+            raise ValueError("Could not find the appropriate text tag in the scraped page")
         output = json.loads(parsed_page)
         output = pd.DataFrame(output)
         output['date'] = pd.to_datetime(output['date'],unit='s').apply(lambda x: x.date())
         output['date'] = pd.to_datetime(output['date'])
+        # dividends mess up the dataframe
+        if 'amount' in output.columns:
+            output = output[pd.isnull(output['amount'])]
+            output = output.drop(columns=['amount', 'data', 'type'])
         if market_name is not None:
             output['market_name'] = market_name
         output = self._merge_fill_filter(output)
@@ -364,8 +372,10 @@ class Cryptory():
             parsed_page = urlopen("https://www.eia.gov/dnav/pet/hist/LeafHandler.ashx?n=PET&s=RWTC&f=D",
                                           timeout=self.timeout).read()
             parsed_page = parsed_page.decode("utf8")
-        except Exception as e:
-            return pd.DataFrame({"error":e}, index=[0])
+        except:
+            # future versions may split out the different exceptions (e.g. timeout)
+            #return pd.DataFrame({"error":e}, index=[0])
+            raise
         souped_page = BeautifulSoup(parsed_page, 'html.parser')
         souped_values = [soups.text for soups in souped_page.findAll("td", {"class": "B3"})]
         souped_dates = [datetime.datetime.strptime(
@@ -494,18 +504,18 @@ class Cryptory():
         try:
             _pytrends.build_payload(kw_list, cat=cat, timeframe=trend_dates[0], 
                                    geo=geo, gprop=gprop)
-        except Exception as e:
-            return pd.DataFrame({"error":e}, index=[0])
+        except:
+            raise
         output = _pytrends.interest_over_time().reset_index()
         if len(output)==0:
-            return pd.DataFrame({"error":'search term returned no results (insufficient data)'}, index=[0])
+            raise ValueError('search term returned no results (insufficient data)')
         for date in trend_dates[1:]:
             time.sleep(sleeptime)
             try:
                 _pytrends.build_payload(kw_list, cat=cat, timeframe=date, 
                                          geo=geo, gprop=gprop)
-            except Exception as e:
-                return pd.DataFrame({"error":e}, index=[0])
+            except:
+                raise
             temp_trend = _pytrends.interest_over_time().reset_index()
             temp_trend = temp_trend.merge(output, on="date", how="left")
             # it's ugly but we'll exploit the common column names
@@ -515,7 +525,7 @@ class Cryptory():
                 temp_trend[kw] = temp_trend[kw+'_x'] * norm_factor
             temp_trend =  temp_trend[temp_trend.isnull().any(axis=1)]
             temp_trend['isPartial'] = temp_trend['isPartial_x']
-            output = pd.concat([output, temp_trend[['date', 'isPartial'] + kw_list]], axis=0)
+            output = pd.concat([output, temp_trend[['date', 'isPartial'] + kw_list]], axis=0, sort=False)
         
         # reorder columns in alphabetical order
         output = output[['date', 'isPartial']+kw_list]
